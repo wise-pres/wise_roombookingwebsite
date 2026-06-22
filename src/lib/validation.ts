@@ -34,7 +34,6 @@ export const bookingRequestSchema = z
     avAcknowledged: z.boolean(),
     primaryChoice: roomChoiceSchema,
     alternatives: z.array(roomChoiceSchema).max(3),
-    turnstileToken: z.string().trim().max(4096).optional(),
   })
   .superRefine((value, context) => {
     if (value.endTime <= value.startTime) {

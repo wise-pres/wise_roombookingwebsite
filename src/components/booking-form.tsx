@@ -5,7 +5,6 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { calculateAvEstimate, formatAvEstimate, getUrgencyReasons } from "@/lib/booking-rules";
 import { findRoomByCode } from "@/lib/catalog";
 import { RoomSelector } from "@/components/room-selector";
-import { Turnstile } from "@/components/turnstile";
 import type { BookingRequestInput, Room, RoomChoice, WiseTeam } from "@/lib/types";
 
 const teams: WiseTeam[] = ["PD", "Outreach", "Conference", "Finance", "Marketing", "Internal"];
@@ -32,7 +31,6 @@ export function BookingForm({ initialRooms }: { initialRooms: Room[] }) {
   const [rooms, setRooms] = useState(initialRooms);
   const [input, setInput] = useState<BookingRequestInput>(initialInput);
   const [attendeeText, setAttendeeText] = useState("1");
-  const [turnstileToken, setTurnstileToken] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState<SubmissionResult | null>(null);
@@ -88,7 +86,7 @@ export function BookingForm({ initialRooms }: { initialRooms: Room[] }) {
       const response = await fetch("/api/requests", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...input, attendees: attendeeCount, turnstileToken: turnstileToken || undefined }),
+        body: JSON.stringify({ ...input, attendees: attendeeCount }),
       });
       const payload = (await response.json()) as SubmissionResult & { error?: string };
       if (!response.ok) {
@@ -175,9 +173,8 @@ export function BookingForm({ initialRooms }: { initialRooms: Room[] }) {
             <label className="check-row"><input type="checkbox" checked={input.avAcknowledged} onChange={(event) => setInput({ ...input, avAcknowledged: event.target.checked })} /> I understand this estimate is before tax.</label>
           </div>
         )}
-        {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && <Turnstile siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY} onTokenChange={setTurnstileToken} />}
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="button-primary" disabled={submitting || (avEstimate !== null && !input.avAcknowledged) || (Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY) && !turnstileToken)} type="submit">{submitting ? "Submitting…" : "Submit room request"}</button>
+        <button className="button-primary" disabled={submitting || (avEstimate !== null && !input.avAcknowledged)} type="submit">{submitting ? "Submitting…" : "Submit room request"}</button>
       </section>
     </form>
   );

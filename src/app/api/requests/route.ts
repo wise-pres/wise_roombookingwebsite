@@ -7,7 +7,6 @@ import { notifyNewRequest } from "@/lib/server/notifications";
 import { allowRequest } from "@/lib/server/rate-limit";
 import { createBookingRequest } from "@/lib/server/repository";
 import { hasSupabaseConfiguration } from "@/lib/server/supabase";
-import { verifyTurnstile } from "@/lib/server/turnstile";
 import { parseBookingRequest } from "@/lib/validation";
 
 export async function POST(request: Request) {
@@ -17,9 +16,6 @@ export async function POST(request: Request) {
     const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
     if (!allowRequest(`ip:${forwardedFor}`) || !allowRequest(`email:${input.email.toLowerCase()}`)) {
       return NextResponse.json({ error: "Too many requests. Please wait and try again." }, { status: 429 });
-    }
-    if (!(await verifyTurnstile(input.turnstileToken))) {
-      return NextResponse.json({ error: "Please complete the human verification and try again." }, { status: 400 });
     }
     if (!hasSupabaseConfiguration()) {
       return NextResponse.json({ error: "Booking submissions are not configured yet." }, { status: 503 });

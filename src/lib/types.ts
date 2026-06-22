@@ -60,7 +60,6 @@ export type BookingRequestInput = {
   avAcknowledged: boolean;
   primaryChoice: RoomChoice;
   alternatives: RoomChoice[];
-  turnstileToken?: string;
 };
 
 export type BookingRequestRecord = BookingRequestInput & {

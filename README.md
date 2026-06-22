@@ -19,7 +19,6 @@ node -e "const { createHash } = require('node:crypto'); console.log(createHash('
 ## Environment variables
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`: application database and protected storage access.
-- `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`: Cloudflare Turnstile for public requests.
 - `SLACK_WEBHOOK_URL`: private WISE Slack-channel alert webhook.
 - `RESEND_API_KEY`, `EMAIL_FROM`: requester receipts and status emails.
 - `ADMIN_DASHBOARD_PASSWORD_HASH`, `SESSION_SECRET`: shared-passcode dashboard protection.
