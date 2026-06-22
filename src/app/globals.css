@@ -94,9 +94,13 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #d8c4f3; border-c
 .admin-tabs button.is-active { border-color: var(--teal); color: var(--teal-dark); }
 .admin-tabs span { margin-left: 4px; padding: 2px 6px; border-radius: 999px; background: var(--soft-coral); color: #a33825; font-size: .75rem; }
 .admin-message { margin: 14px 0; padding: 10px; border-radius: 8px; background: var(--soft-teal); color: var(--teal-dark); }
+.request-filter-bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin: 0 0 18px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.request-filter-bar label { width: min(100%, 320px); }
+.request-filter-bar p { margin: 0; color: var(--muted); font-size: .9rem; }
 .request-list { display: grid; gap: 14px; }
 .request-card { padding: 22px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; }
 .request-card--urgent { border: 2px solid var(--coral); }
+.request-card:has(select option[value="in_review"]:checked), .request-card:has(select option[value="needs_alternatives"]:checked) { border: 2px solid var(--teal); box-shadow: 0 10px 26px rgba(112, 67, 174, .12); }
 .request-card__top { display: flex; justify-content: space-between; gap: 20px; }
 .request-card h3 { margin: 4px 0; font-size: 1.2rem; }
 .request-card p { margin: 3px 0; color: var(--muted); }
@@ -142,7 +146,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #d8c4f3; border-c
   .selected-room > div { padding: 0 14px 14px; }
   .room-image--compact { height: 180px; }
   .suggestion { align-items: flex-start; flex-direction: column; }
-  .admin-header, .dashboard-toolbar { align-items: flex-start; flex-direction: column; }
+  .admin-header, .dashboard-toolbar, .request-filter-bar { align-items: flex-start; flex-direction: column; }
   .request-card__top { flex-direction: column; }
   .admin-shell { padding: 24px 14px 60px; }
 }

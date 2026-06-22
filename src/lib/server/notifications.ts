@@ -16,6 +16,11 @@ type NotificationRequest = {
   urgencyReasons: string[];
 };
 
+export type DeliveryResult = {
+  delivered: boolean;
+  error?: string;
+};
+
 function emailClient(): Resend | null {
   return process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 }
@@ -24,59 +29,79 @@ function fromAddress(): string | null {
   return process.env.EMAIL_FROM ?? null;
 }
 
-async function sendEmail(to: string, subject: string, text: string): Promise<void> {
+async function sendEmail(to: string, subject: string, text: string): Promise<DeliveryResult> {
   const client = emailClient();
   const from = fromAddress();
-  if (!client || !from) {
-    return;
+  if (!client) {
+    return { delivered: false, error: "RESEND_API_KEY is not configured." };
   }
-  const { error } = await client.emails.send({ from, to, subject, text });
-  if (error) {
-    throw new Error(error.message);
+  if (!from) {
+    return { delivered: false, error: "EMAIL_FROM is not configured." };
+  }
+  try {
+    const { error } = await client.emails.send({ from, to, subject, text });
+    if (error) {
+      return { delivered: false, error: error.message };
+    }
+    return { delivered: true };
+  } catch (error) {
+    return { delivered: false, error: error instanceof Error ? error.message : "Resend could not send the email." };
   }
 }
 
-export async function notifyNewRequest(request: NotificationRequest, primaryRoom: string): Promise<void> {
+async function sendSlack(request: NotificationRequest, primaryRoom: string): Promise<DeliveryResult> {
   const urgencyLabel = request.isUrgent ? "URGENT: " : "";
   const slackUrl = process.env.SLACK_WEBHOOK_URL;
-  if (slackUrl) {
-    const lines = [
-      `*${urgencyLabel}New WISE room request* - ${request.reference}`,
-      `${request.team}: ${request.purpose}`,
-      `${request.eventDate}, ${request.startTime}-${request.endTime} - ${request.attendees} attendees`,
-      `Primary room: ${primaryRoom}`,
-      ...(request.isUrgent ? request.urgencyReasons.map((reason) => `:rotating_light: ${reason}`) : []),
-    ];
+  if (!slackUrl) {
+    return { delivered: false, error: "SLACK_WEBHOOK_URL is not configured." };
+  }
+  const lines = [
+    `*${urgencyLabel}New WISE room request* - ${request.reference}`,
+    `${request.team}: ${request.purpose}`,
+    `${request.eventDate}, ${request.startTime}-${request.endTime} - ${request.attendees} attendees`,
+    `Primary room: ${primaryRoom}`,
+    ...(request.isUrgent ? request.urgencyReasons.map((reason) => `:rotating_light: ${reason}`) : []),
+  ];
+  try {
     const response = await fetch(slackUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ text: lines.join("\n") }),
     });
     if (!response.ok) {
-      throw new Error("Slack notification failed.");
+      return { delivered: false, error: `Slack rejected the alert (${response.status}).` };
     }
+    return { delivered: true };
+  } catch (error) {
+    return { delivered: false, error: error instanceof Error ? error.message : "Slack could not send the alert." };
   }
+}
 
-  await sendEmail(
-    request.email,
-    `WISE room request received - ${request.reference}`,
-    [
-      `Hi ${request.requesterName},`,
-      "",
-      `We received your room request (${request.reference}) and it is pending WISE coordinator review.`,
-      `Event: ${request.purpose}`,
-      `When: ${request.eventDate}, ${request.startTime}-${request.endTime}`,
-      `Primary room: ${primaryRoom}`,
-      "",
-      "A coordinator will email you once the request status changes.",
-    ].join("\n"),
-  );
+export async function notifyNewRequest(request: NotificationRequest, primaryRoom: string): Promise<{ email: DeliveryResult; slack: DeliveryResult }> {
+  const [slack, email] = await Promise.all([
+    sendSlack(request, primaryRoom),
+    sendEmail(
+      request.email,
+      `WISE room request received - ${request.reference}`,
+      [
+        `Hi ${request.requesterName},`,
+        "",
+        `We received your room request (${request.reference}) and it is pending WISE coordinator review.`,
+        `Event: ${request.purpose}`,
+        `When: ${request.eventDate}, ${request.startTime}-${request.endTime}`,
+        `Primary room: ${primaryRoom}`,
+        "",
+        "A coordinator will email you once the request status changes.",
+      ].join("\n"),
+    ),
+  ]);
+  return { email, slack };
 }
 
 export async function notifyStatusChange(
   request: Pick<NotificationRequest, "email" | "requesterName" | "reference">,
   status: BookingStatus,
-): Promise<void> {
+): Promise<DeliveryResult> {
   const readableStatus: Record<BookingStatus, string> = {
     new: "New",
     in_review: "In review",
@@ -85,7 +110,7 @@ export async function notifyStatusChange(
     needs_alternatives: "Needs alternatives",
     declined: "Declined",
   };
-  await sendEmail(
+  return sendEmail(
     request.email,
     `WISE room request update - ${request.reference}`,
     `Hi ${request.requesterName},\n\nYour WISE room request (${request.reference}) is now: ${readableStatus[status]}.\n\nA coordinator will follow up if more information is needed.`,

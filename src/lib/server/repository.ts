@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 
 import { calculateAvEstimate, getUrgencyReasons } from "@/lib/booking-rules";
+import { shouldClearUrgency } from "@/lib/request-workflow";
 import type { BookingRequestInput, BookingStatus, Room, RoomPhoto } from "@/lib/types";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 
@@ -209,7 +210,8 @@ export async function getBookingRequest(id: string): Promise<AdminBookingRequest
 
 export async function updateBookingStatus(id: string, status: BookingStatus): Promise<AdminBookingRequest> {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.from("booking_requests").update({ status }).eq("id", id).select().single();
+  const values = shouldClearUrgency(status) ? { status, is_urgent: false } : { status };
+  const { data, error } = await supabase.from("booking_requests").update(values).eq("id", id).select().single();
   if (error) {
     throw error;
   }

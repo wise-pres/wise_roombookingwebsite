@@ -25,7 +25,7 @@ const initialInput: BookingRequestInput = {
   alternatives: [],
 };
 
-type SubmissionResult = { reference: string; isUrgent: boolean; urgencyReasons: string[]; avEstimate: string | null };
+type SubmissionResult = { reference: string; isUrgent: boolean; urgencyReasons: string[]; avEstimate: string | null; receiptEmailSent: boolean };
 
 export function BookingForm({ initialRooms }: { initialRooms: Room[] }) {
   const [rooms, setRooms] = useState(initialRooms);
@@ -105,7 +105,7 @@ export function BookingForm({ initialRooms }: { initialRooms: Room[] }) {
       <section className="confirmation-card" aria-live="polite">
         <p className="eyebrow">Request received</p>
         <h2>{submitted.reference}</h2>
-        <p>We emailed a receipt to {input.email}. A WISE coordinator will review your request and email any status updates.</p>
+        <p>{submitted.receiptEmailSent ? `We emailed a receipt to ${input.email}.` : "Your request is recorded."} A WISE coordinator will review it and email any status updates.</p>
         {submitted.isUrgent && (
           <p className="warning">This request is marked urgent for the coordinator: {submitted.urgencyReasons.join(" ")}</p>
         )}

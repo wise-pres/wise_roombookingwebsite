@@ -3,6 +3,8 @@
 import { FormEvent, useMemo, useState } from "react";
 
 import { RoomImage } from "@/components/room-image";
+import { BOOKING_STATUSES, bookingStatusLabel, isResolvedForCoordinator, matchesRequestFilter, requestPriority, type RequestFilter } from "@/lib/request-workflow";
+import type { DeliveryResult } from "@/lib/server/notifications";
 import type { BookingSource, BookingStatus, Room } from "@/lib/types";
 
 type Tag = { id: string; name: string };
@@ -44,8 +46,17 @@ type RoomDraft = {
   tagIds: string[];
 };
 
-const statuses: BookingStatus[] = ["new", "in_review", "submitted", "booked", "needs_alternatives", "declined"];
 const sources: BookingSource[] = ["sop", "engsoc", "wise", "utsu", "custom"];
+const statuses = BOOKING_STATUSES;
+const requestFilters: Array<{ value: RequestFilter; label: string }> = [
+  { value: "all", label: "All requests" },
+  { value: "in_progress", label: "In progress" },
+  { value: "new", label: "Not started" },
+  { value: "submitted", label: "Submitted" },
+  { value: "booked", label: "Booked" },
+  { value: "needs_alternatives", label: "Needs alternatives" },
+  { value: "declined", label: "Declined" },
+];
 
 function newRoomDraft(): RoomDraft {
   return { code: "", building: "", displayName: "", capacity: "", roomType: "Meeting Room", bookingSource: "custom", detailsUrl: "", isActive: true, tagIds: [] };
@@ -66,22 +77,42 @@ function draftFromRoom(room: Room, tags: Tag[]): RoomDraft {
   };
 }
 
+function isDisplayedUrgent(request: AdminRequest): boolean {
+  return request.is_urgent && !isResolvedForCoordinator(request.status);
+}
+
 function statusLabel(status: BookingStatus): string {
-  return status.replaceAll("_", " ");
+  return bookingStatusLabel(status);
 }
 
 export function AdminDashboard({ initialRequests, initialRooms, initialTags }: { initialRequests: AdminRequest[]; initialRooms: Room[]; initialTags: Tag[] }) {
-  const [requests, setRequests] = useState(initialRequests);
+  const [requests, setRequests] = useState(() => initialRequests.map((request) => (
+    isResolvedForCoordinator(request.status) ? { ...request, is_urgent: false } : request
+  )));
   const [rooms, setRooms] = useState(initialRooms);
   const [tags, setTags] = useState(initialTags);
   const [section, setSection] = useState<"requests" | "catalogue">("requests");
   const [urgentOnly, setUrgentOnly] = useState(false);
+  const [requestFilter, setRequestFilter] = useState<RequestFilter>("all");
   const [roomDraft, setRoomDraft] = useState<RoomDraft>(newRoomDraft);
   const [selectedRoomCode, setSelectedRoomCode] = useState("");
   const [message, setMessage] = useState("");
 
   const selectedRoom = rooms.find((room) => room.code === selectedRoomCode);
-  const displayedRequests = useMemo(() => (urgentOnly ? requests.filter((request) => request.is_urgent) : requests), [requests, urgentOnly]);
+  const displayedRequests = useMemo(
+    () => requests
+      .filter((request) => matchesRequestFilter(request.status, requestFilter))
+      .filter((request) => !urgentOnly || isDisplayedUrgent(request))
+      .sort((first, second) => {
+        const priorityDifference = requestPriority(first.status) - requestPriority(second.status);
+        if (priorityDifference) {
+          return priorityDifference;
+        }
+        const urgencyDifference = Number(isDisplayedUrgent(second)) - Number(isDisplayedUrgent(first));
+        return urgencyDifference || second.created_at.localeCompare(first.created_at);
+      }),
+    [requestFilter, requests, urgentOnly],
+  );
 
   async function refreshRooms() {
     const response = await fetch("/api/admin/rooms");
@@ -105,12 +136,19 @@ export function AdminDashboard({ initialRequests, initialRooms, initialTags }: {
   async function changeStatus(id: string, status: BookingStatus) {
     setMessage("");
     const response = await fetch("/api/admin/requests", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, status }) });
-    const payload = (await response.json()) as { request?: AdminRequest; error?: string };
+    const payload = (await response.json()) as { request?: AdminRequest; emailDelivery?: DeliveryResult; error?: string };
     if (!response.ok || !payload.request) {
       setMessage(payload.error ?? "Unable to update request status.");
       return;
     }
     setRequests((current) => current.map((request) => (request.id === id ? { ...request, ...payload.request } : request)));
+    if (payload.emailDelivery?.delivered) {
+      setMessage("Status updated and the requester was emailed.");
+    } else if (payload.emailDelivery) {
+      setMessage(`Status updated, but the requester email was not sent: ${payload.emailDelivery.error ?? "Unknown email error."}`);
+    } else {
+      setMessage("Status updated.");
+    }
   }
 
   async function saveRoom(event: FormEvent<HTMLFormElement>) {
@@ -234,6 +272,8 @@ export function AdminDashboard({ initialRequests, initialRooms, initialTags }: {
       <header className="admin-header"><div><p className="eyebrow">WISE coordinator workspace</p><h1>Room requests and catalogue</h1></div><button className="button-secondary" type="button" onClick={() => fetch("/api/admin/session", { method: "DELETE" }).then(() => window.location.reload())}>Sign out</button></header>
       <nav className="admin-tabs"><button type="button" className={section === "requests" ? "is-active" : ""} onClick={() => setSection("requests")}>Requests <span>{requests.filter((request) => request.is_urgent).length} urgent</span></button><button type="button" className={section === "catalogue" ? "is-active" : ""} onClick={() => setSection("catalogue")}>Rooms, photos & tags</button></nav>
       {message && <p className="admin-message" role="status">{message}</p>}
+
+      {section === "requests" && <div className="request-filter-bar"><label>Show requests<select value={requestFilter} onChange={(event) => setRequestFilter(event.target.value as RequestFilter)}>{requestFilters.map((filter) => <option key={filter.value} value={filter.value}>{filter.label}</option>)}</select></label><p>In-progress requests are shown first and outlined in purple.</p></div>}
 
       {section === "requests" && <section><div className="dashboard-toolbar"><h2>Requests</h2><label className="check-row"><input type="checkbox" checked={urgentOnly} onChange={(event) => setUrgentOnly(event.target.checked)} /> Show urgent only</label></div><div className="request-list">{displayedRequests.map((request) => <article className={`request-card ${request.is_urgent ? "request-card--urgent" : ""}`} key={request.id}><div className="request-card__top"><div><span className="reference">{request.reference}</span><h3>{request.purpose}</h3><p>{request.team} · {request.event_date} · {request.start_time.slice(0, 5)}-{request.end_time.slice(0, 5)} · {request.attendees} attendees</p></div>{request.is_urgent && <span className="urgent-badge">Urgent</span>}</div>{request.is_urgent && <ul className="urgency-list">{request.urgency_reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>}<div className="request-details"><p><strong>Requester:</strong> {request.requester_name ?? "Name removed"} · <a href={`mailto:${request.email}`}>{request.email}</a></p><p><strong>Primary:</strong> {request.primary_room?.display_name ?? request.primary_custom_room ?? "Not specified"}</p>{request.booking_request_alternatives?.length ? <p><strong>Alternatives:</strong> {request.booking_request_alternatives.sort((first, second) => first.preference_rank - second.preference_rank).map((alternative) => alternative.room?.display_name ?? alternative.custom_room).join(" → ")}</p> : null}{request.primary_custom_room && <button type="button" className="button-link" onClick={() => draftCustomRoom(request.primary_custom_room!)}>Use custom room as catalogue draft</button>}</div><label>Request status<select value={request.status} onChange={(event) => changeStatus(request.id, event.target.value as BookingStatus)}>{statuses.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label></article>)}</div>{!displayedRequests.length && <p className="empty-state">No matching requests.</p>}</section>}
 

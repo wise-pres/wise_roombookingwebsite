@@ -7,7 +7,7 @@ A room-request intake and coordination portal for WISE U of T. Requesters receiv
 1. Install dependencies with `npm install`.
 2. Copy `.env.example` to `.env.local` and fill in the deployment values.
 3. Create a Supabase project, then run `supabase db push` to apply `supabase/migrations/202606210001_init.sql`.
-4. Seed the room catalogue with `npm run seed:catalog` after setting `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+4. Seed the room catalogue with `npm run seed:catalog`. The command reads `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from `.env.local`.
 5. Run `npm run dev` and open `http://localhost:3000`.
 
 The dashboard passcode is compared to a SHA-256 hash. Generate the value for `ADMIN_DASHBOARD_PASSWORD_HASH` with:

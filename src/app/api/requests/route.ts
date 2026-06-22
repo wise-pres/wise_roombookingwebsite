@@ -38,9 +38,12 @@ export async function POST(request: Request) {
       isUrgent: created.is_urgent,
       urgencyReasons: created.urgency_reasons,
     };
-    const notificationResults = await Promise.allSettled([notifyNewRequest(notificationRequest, primaryRoom)]);
-    if (notificationResults.some((result) => result.status === "rejected")) {
-      console.error("Request notifications failed", notificationResults);
+    const notifications = await notifyNewRequest(notificationRequest, primaryRoom);
+    if (!notifications.email.delivered) {
+      console.error("Requester receipt email failed", notifications.email.error);
+    }
+    if (!notifications.slack.delivered) {
+      console.error("Slack alert failed", notifications.slack.error);
     }
 
     return NextResponse.json({
@@ -48,6 +51,7 @@ export async function POST(request: Request) {
       isUrgent: created.is_urgent,
       urgencyReasons: created.urgency_reasons,
       avEstimate: formatAvEstimate(created.av_estimate_cents),
+      receiptEmailSent: notifications.email.delivered,
     });
   } catch (error) {
     if (error instanceof ZodError) {

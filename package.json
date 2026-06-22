@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "import:rooms": "python3 scripts/extract_sop_rooms.py",
-    "seed:catalog": "node scripts/seed-catalog.mjs"
+    "seed:catalog": "node --env-file=.env.local scripts/seed-catalog.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

@@ -3,9 +3,8 @@ import { NextResponse } from "next/server";
 import { notifyStatusChange } from "@/lib/server/notifications";
 import { requireAdminResponse } from "@/lib/server/require-admin";
 import { getBookingRequest, listBookingRequests, updateBookingStatus } from "@/lib/server/repository";
+import { BOOKING_STATUSES } from "@/lib/request-workflow";
 import type { BookingStatus } from "@/lib/types";
-
-const statuses: BookingStatus[] = ["new", "in_review", "submitted", "booked", "needs_alternatives", "declined"];
 
 export async function GET() {
   const unauthorized = await requireAdminResponse();
@@ -26,7 +25,7 @@ export async function PATCH(request: Request) {
     return unauthorized;
   }
   const body = (await request.json()) as { id?: string; status?: BookingStatus };
-  if (!body.id || !body.status || !statuses.includes(body.status)) {
+  if (!body.id || !body.status || !BOOKING_STATUSES.includes(body.status)) {
     return NextResponse.json({ error: "A request id and valid status are required." }, { status: 400 });
   }
   try {
@@ -35,16 +34,14 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Request not found." }, { status: 404 });
     }
     const updated = await updateBookingStatus(body.id, body.status);
-    const results = await Promise.allSettled([
-      notifyStatusChange(
-        { email: existing.email, requesterName: existing.requester_name ?? "there", reference: existing.reference },
-        body.status,
-      ),
-    ]);
-    if (results.some((result) => result.status === "rejected")) {
-      console.error("Status notification failed", results);
+    const emailDelivery = await notifyStatusChange(
+      { email: existing.email, requesterName: existing.requester_name ?? "there", reference: existing.reference },
+      body.status,
+    );
+    if (!emailDelivery.delivered) {
+      console.error("Status notification failed", emailDelivery.error);
     }
-    return NextResponse.json({ request: updated });
+    return NextResponse.json({ request: updated, emailDelivery });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Unable to update request." }, { status: 500 });
