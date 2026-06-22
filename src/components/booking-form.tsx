@@ -30,10 +30,13 @@ type SubmissionResult = { reference: string; isUrgent: boolean; urgencyReasons: 
 export function BookingForm({ initialRooms }: { initialRooms: Room[] }) {
   const [rooms, setRooms] = useState(initialRooms);
   const [input, setInput] = useState<BookingRequestInput>(initialInput);
+  const [attendeeText, setAttendeeText] = useState("1");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState<SubmissionResult | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const attendeeCount = Number(attendeeText);
+  const suggestedAttendeeCount = Number.isInteger(attendeeCount) && attendeeCount > 0 ? attendeeCount : 1;
 
   useEffect(() => {
     fetch("/api/rooms")
@@ -79,10 +82,13 @@ export function BookingForm({ initialRooms }: { initialRooms: Room[] }) {
     setSubmitting(true);
     const turnstileToken = formRef.current?.querySelector<HTMLInputElement>("[name='cf-turnstile-response']")?.value;
     try {
+      if (!Number.isInteger(attendeeCount) || attendeeCount < 1) {
+        throw new Error("Enter at least one expected attendee.");
+      }
       const response = await fetch("/api/requests", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...input, turnstileToken }),
+        body: JSON.stringify({ ...input, attendees: attendeeCount, turnstileToken }),
       });
       const payload = (await response.json()) as SubmissionResult & { error?: string };
       if (!response.ok) {
@@ -105,7 +111,7 @@ export function BookingForm({ initialRooms }: { initialRooms: Room[] }) {
         {submitted.isUrgent && (
           <p className="warning">This request is marked urgent for the coordinator: {submitted.urgencyReasons.join(" ")}</p>
         )}
-        <button type="button" onClick={() => { setInput(initialInput); setSubmitted(null); }}>
+        <button type="button" onClick={() => { setInput(initialInput); setAttendeeText("1"); setSubmitted(null); }}>
           Submit another request
         </button>
       </section>
@@ -123,7 +129,7 @@ export function BookingForm({ initialRooms }: { initialRooms: Room[] }) {
           <label>Email<input required type="email" value={input.email} onChange={(event) => setInput({ ...input, email: event.target.value })} /></label>
           <label>Name<input required value={input.requesterName} onChange={(event) => setInput({ ...input, requesterName: event.target.value })} /></label>
           <label>Team<select value={input.team} onChange={(event) => setInput({ ...input, team: event.target.value as WiseTeam })}>{teams.map((team) => <option key={team}>{team}</option>)}</select></label>
-          <label>Expected attendees<input required min="1" max="2000" type="number" value={input.attendees} onChange={(event) => setInput({ ...input, attendees: Number(event.target.value) || 1 })} /></label>
+          <label>Expected attendees<input required min="1" max="2000" type="number" value={attendeeText} onChange={(event) => setAttendeeText(event.target.value)} /></label>
           <label className="form-grid__wide">Purpose for booking<input required minLength={3} placeholder="e.g. Conference bi-weekly sync" value={input.purpose} onChange={(event) => setInput({ ...input, purpose: event.target.value })} /></label>
           <label>Date<input required type="date" value={input.eventDate} onChange={(event) => setInput({ ...input, eventDate: event.target.value, avAcknowledged: false })} /></label>
           <label>Start time<input required type="time" value={input.startTime} onChange={(event) => setInput({ ...input, startTime: event.target.value })} /></label>
@@ -145,10 +151,10 @@ export function BookingForm({ initialRooms }: { initialRooms: Room[] }) {
           <h2>Pick a primary and backups</h2>
           <p className="field-help">Suggestions are based on attendance, not live availability. A coordinator confirms the actual booking.</p>
         </div>
-        <RoomSelector label="Primary room" description="Choose your best option, or enter an option that is not listed." rooms={rooms} attendees={input.attendees} value={input.primaryChoice} onChange={(choice) => updateChoice(0, choice)} />
+        <RoomSelector label="Primary room" description="Choose your best option, or enter an option that is not listed." rooms={rooms} attendees={suggestedAttendeeCount} value={input.primaryChoice} onChange={(choice) => updateChoice(0, choice)} />
         {input.alternatives.map((choice, index) => (
           <div className="alternative" key={index}>
-            <RoomSelector label={`Alternative ${index + 1}`} description="Optional fallback, in preference order." rooms={rooms} attendees={input.attendees} value={choice} onChange={(nextChoice) => updateChoice(index + 1, nextChoice)} />
+            <RoomSelector label={`Alternative ${index + 1}`} description="Optional fallback, in preference order." rooms={rooms} attendees={suggestedAttendeeCount} value={choice} onChange={(nextChoice) => updateChoice(index + 1, nextChoice)} />
             <button type="button" className="button-link" onClick={() => setInput((current) => ({ ...current, alternatives: current.alternatives.filter((_, currentIndex) => currentIndex !== index) }))}>Remove alternative</button>
           </div>
         ))}
